@@ -1,6 +1,7 @@
 from typing import (
     Dict,
     Any,
+    List,
 )
 
 import logging
@@ -21,6 +22,18 @@ logger.setLevel(logging.WARN)
 
 FILE = "glpi-empty.sql"
 VERBOSE = 0
+
+# we expect all these cols to have the same definition
+COMMON_COLS: List[str] = [
+    "id",
+    "name",
+    "comment",
+    "date_creation",
+    "date_mod",
+    "is_deleted",
+    "entities_id",
+    "date_update",
+]
 
 
 class IndentDumper(yaml.Dumper):  # pylint: disable=too-many-ancestors
@@ -250,6 +263,43 @@ def detect_common_fields(data: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def detect_relations(data: Dict[str, Any]) -> Dict[str, Any]:
+    # temp: Dict[str, Any] = {}
+    result: Dict[str, Any] = {}
+
+    for t_name, t_def in data.items():
+        for c_name, c_def in t_def["cols"].items():
+            _ = c_def
+
+            rel = False
+            via = ""
+            d_name = ""
+            if c_name.endswith("_id"):
+                if c_name[:-3] in data:
+                    rel = True
+                    via = c_name
+                    d_name = c_name[:-3]
+
+            if "_id_" in c_name:
+                a = c_name.split("_id_")
+                if a[0] in data:
+                    rel = True
+                    via = c_name
+                    d_name = a[0]
+
+            if rel:
+                print("RELATION:", t_name, "->", d_name, "via", via, file=sys.stderr)
+                if t_name not in result:
+                    result[t_name] = {}
+
+                if d_name not in result[t_name]:
+                    result[t_name][d_name] = {}
+
+                result[t_name][d_name][via] = {}
+
+    return result
+
+
 def main() -> None:
     text = load_file(FILE)
     gram = my_gram("gram.lark")
@@ -268,10 +318,13 @@ def main() -> None:
     rr = zz.transform(t)
     common_fields = detect_common_fields(rr)
 
+    relations = detect_relations(rr)
+    # we expect all relations to have indexes on the _id fields
+
     analize = {
         "domain": common_fields,
         "tables": rr,
-        "relations": {},
+        "relations": relations,
         "issues": {},
     }
 
