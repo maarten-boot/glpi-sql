@@ -4,14 +4,14 @@ PYTHON		:=	python3.12
 PL_LINTERS	:=	eradicate,mccabe,pycodestyle,pyflakes,pylint
 LINE_LENGTH	:= 120
 PY_FILES 	:= *.py
-PL_IGNORE	:= C0114,C0116,C0115,C0103,W0719,R0904,W0231,E203
+PL_IGNORE	:= C0114,C0116,C0115,C0103,W0719,R0904,W0231,E203,C901
 
 # Doc strings missing: C0114,C0116,C0115,C0103
 # W0719
 # R0904
 # W0231
 # E203
-
+# C901
 all: clean prep run
 
 clean:

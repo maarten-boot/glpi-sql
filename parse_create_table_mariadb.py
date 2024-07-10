@@ -35,6 +35,33 @@ COMMON_COLS: List[str] = [
     "date_update",
 ]
 
+DOMAINS: Dict[str, Any] = {
+    "varchar255_null": {
+        "default": "null",
+        "type": "varchar:255",
+    },
+    "default_pk": {
+        "null": False,
+        "auto_increment": True,
+        "type": "int:unsigned",
+    },
+    "u_int_nn_d0": {
+        "null": False,
+        "type": "int:unsigned",
+        "default": "0",
+    },
+    "bool_false": {
+        "null": False,
+        "default": "0",
+        "type": "tinyint",
+    },
+    "timestamp_null": {
+        "null": True,
+        "default": "null",
+        "type": "timestamp",
+    },
+}
+
 
 class IndentDumper(yaml.Dumper):  # pylint: disable=too-many-ancestors
     def increase_indent(
@@ -249,6 +276,9 @@ def detect_common_fields(data: Dict[str, Any]) -> Dict[str, Any]:
     temp: Dict[str, Any] = {}
 
     result: Dict[str, Any] = {}
+    for k, v in DOMAINS.items():
+        result[k] = v
+
     for t_name, t_def in data.items():
         for c_name, c_def in t_def["cols"].items():
             if c_name not in temp:
@@ -257,7 +287,7 @@ def detect_common_fields(data: Dict[str, Any]) -> Dict[str, Any]:
 
             z = temp[c_name]
             for k, _ in c_def.items():
-                if k not in z:
+                if VERBOSE and k not in z:
                     print(f"missing {k} in def: {c_name}", t_name, file=sys.stderr)
 
     return result
@@ -268,7 +298,9 @@ def detect_relations(data: Dict[str, Any]) -> Dict[str, Any]:
     result: Dict[str, Any] = {}
 
     for t_name, t_def in data.items():
-        for c_name, c_def in t_def["cols"].items():
+        cols = t_def["cols"]
+        keys = t_def["keys"]
+        for c_name, c_def in cols.items():
             _ = c_def
 
             rel = False
@@ -289,6 +321,7 @@ def detect_relations(data: Dict[str, Any]) -> Dict[str, Any]:
 
             if rel:
                 print("RELATION:", t_name, "->", d_name, "via", via, file=sys.stderr)
+
                 if t_name not in result:
                     result[t_name] = {}
 
@@ -296,6 +329,23 @@ def detect_relations(data: Dict[str, Any]) -> Dict[str, Any]:
                     result[t_name][d_name] = {}
 
                 result[t_name][d_name][via] = {}
+
+                if via not in keys:
+                    msg = (
+                        f"    no index for {via} in table: {t_name}: "
+                        + "would be needed to implement referential integrity"
+                    )
+                    print(
+                        msg,
+                        file=sys.stderr,
+                    )
+
+    return result
+
+
+def extract_parents(data: Dict[str, Any]) -> Dict[str, any]:
+    _ = data
+    result: Dict[str, Any] = {}
 
     return result
 
@@ -316,15 +366,16 @@ def main() -> None:
     # print(json.dumps(zz.tables, indent=2))
 
     rr = zz.transform(t)
-    common_fields = detect_common_fields(rr)
 
+    common_fields = detect_common_fields(rr)
     relations = detect_relations(rr)
-    # we expect all relations to have indexes on the _id fields
+    parents = extract_parents(rr)
 
     analize = {
         "domain": common_fields,
-        "tables": rr,
+        "parents": parents,
         "relations": relations,
+        "tables": rr,
         "issues": {},
     }
 
