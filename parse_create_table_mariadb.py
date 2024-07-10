@@ -294,7 +294,7 @@ def detect_common_fields(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def detect_relations(data: Dict[str, Any]) -> Dict[str, Any]:
-    # temp: Dict[str, Any] = {}
+    temp: Dict[str, Any] = {}
     result: Dict[str, Any] = {}
 
     for t_name, t_def in data.items():
@@ -319,31 +319,55 @@ def detect_relations(data: Dict[str, Any]) -> Dict[str, Any]:
                     via = c_name
                     d_name = a[0]
 
-            if rel:
-                print("RELATION:", t_name, "->", d_name, "via", via, file=sys.stderr)
+            if not rel:
+                continue
 
-                if t_name not in result:
-                    result[t_name] = {}
+            print("RELATION:", t_name, "->", d_name, "via", via, file=sys.stderr)
 
-                if d_name not in result[t_name]:
-                    result[t_name][d_name] = {}
+            if t_name not in result:
+                result[t_name] = {}
 
-                result[t_name][d_name][via] = {}
+            if d_name not in result[t_name]:
+                result[t_name][d_name] = {}
 
-                if via not in keys:
-                    msg = (
-                        f"    no index for {via} in table: {t_name}: "
-                        + "would be needed to implement referential integrity"
-                    )
-                    print(
-                        msg,
-                        file=sys.stderr,
-                    )
+            result[t_name][d_name][via] = {}
 
-    return result
+            if via not in keys:
+                if t_name not in temp:
+                    temp[t_name] = {}
+                temp[t_name][via] = "NoIndexForReferencialIntegrity"
+
+                msg = (
+                    f"    no index for {via} in table: {t_name}: "
+                    + "would be needed to implement referential integrity"
+                )
+                print(
+                    msg,
+                    file=sys.stderr,
+                )
+
+    return result, temp
 
 
 def extract_parents(data: Dict[str, Any]) -> Dict[str, any]:
+    """Extract common patterns and reduce the length of the table def, initially dont move the indexes
+
+    typical common parents could be:
+     - MinimalBase:
+        having the default pk
+     - HavingNameAndComment:
+        name(vc 255, def null), comment(text, def null)
+     - HavingDefaultTimeStampsCreMod:
+        date_mod, date_create
+    StandardBase:
+        some tables are only that: MinimalBase, HavingNameAndComment, HavingDefaultTimeStampsCreMod
+    WithEntityAndRecursive:
+    HavingUserGroup:
+    HavingTechUserGroup:
+    FromTemplate:
+
+    """
+
     _ = data
     result: Dict[str, Any] = {}
 
@@ -368,7 +392,7 @@ def main() -> None:
     rr = zz.transform(t)
 
     common_fields = detect_common_fields(rr)
-    relations = detect_relations(rr)
+    relations, rel_issues = detect_relations(rr)
     parents = extract_parents(rr)
 
     analize = {
@@ -376,7 +400,9 @@ def main() -> None:
         "parents": parents,
         "relations": relations,
         "tables": rr,
-        "issues": {},
+        "issues": {
+            "relations": rel_issues,
+        },
     }
 
     print(
