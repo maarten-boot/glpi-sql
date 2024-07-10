@@ -1,7 +1,13 @@
+from typing import (
+    Dict,
+    Any,
+)
+
 import logging
 import sys
-import json
 
+# import json
+import yaml
 
 from lark import (
     Lark,
@@ -14,38 +20,49 @@ from lark import (
 logger.setLevel(logging.WARN)
 
 FILE = "glpi-empty.sql"
+VERBOSE = 0
+
+
+class IndentDumper(yaml.Dumper):  # pylint: disable=too-many-ancestors
+    def increase_indent(
+        self,
+        flow=False,
+        indentless=False,
+    ):
+        return super().increase_indent(flow, False)
 
 
 class TransformProcessor(Transformer):
     def __init__(self):
-        # super().__init__()
+        super().__init__()
         self.tables = {}
 
+    def start(self, z):
+        _ = z
+        return self.tables
+
+    def ignore_until_semicolon(self, z):
+        _ = z
+        return ""
+
     def name(self, z):
-        # what = "NAME"
-        # print(f"{what}: {len(z)} {z}", file=sys.stderr)
         return str(z[0])
 
     def string(self, z):
-        # what = "STRING"
-        # print(f"{what}: {len(z)} {z}", file=sys.stderr)
-
         if z[0][0] == "'":
             return z[0][1:-1]
 
         return z[0]
 
     def number(self, z):
-        # what = "NUMBER"
-        # print(f"{what}: {len(z)} {z[0]}", file=sys.stderr)
-
         if "." in str(z):
             return float(z[0])
         return int(z[0])
 
     def identifier(self, z):
-        what = "IDENTIFIER"
-        print(f"{what}: {len(z)} {z[0]}", file=sys.stderr)
+        if VERBOSE:
+            what = "IDENTIFIER"
+            print(f"{what}: {len(z)} {z[0]}", file=sys.stderr)
         return str(z[0])
 
     def unsigned(self, z):
@@ -53,18 +70,18 @@ class TransformProcessor(Transformer):
         return "unsigned"
 
     def expression(self, z):
-        # what = "EXPRESSION"
-        # print(f"{what}: {len(z)} {z}", file=sys.stderr)
         return z[0]
 
     def default_value(self, z):
         what = "default"
+        k = str(z[1]).lower()
+        if k in ["null", "current_timestamp"]:
+            return {what: k}
+
         # print(f"{what}: {len(z)} {z}", file=sys.stderr)
         return {what: z[1]}
 
     def null_or_not_null(self, z):
-        # what = "NULL"
-        # print(f"{what}: {len(z)} {z}", file=sys.stderr)
         if str(z[0]).lower() == "not":
             return {"null": False}
         return {"null": True}
@@ -78,8 +95,6 @@ class TransformProcessor(Transformer):
         return {str(z).lower(): True}
 
     def comment(self, z):
-        # what = "comment"
-        # print(f"{what}: {len(z)} {z}", file=sys.stderr)
         return {"comment": z[1]}
 
     def column_modifiers(self, z):
@@ -89,7 +104,7 @@ class TransformProcessor(Transformer):
                 if k in rr:
                     raise Exception(f"duplicate column modifier for {k}: {rr} {z}")
                 rr[k] = v
-            print(item, file=sys.stderr)
+            # print(item, file=sys.stderr)
         return rr
 
     @v_args(meta=True)
@@ -117,15 +132,16 @@ class TransformProcessor(Transformer):
         print(msg, file=sys.stderr)
         raise Exception(msg)
 
-    def column_definition(self, z):
-        # what = "column_definition"
-        # print(f"{what}: {len(z)} {z}", file=sys.stderr)
-        # col_name, col_type, col_modifiers_dict
-        return {"col": {z[0]: {z[1]: z[2]}}}
+    @v_args(meta=True)
+    def column_definition(self, meta, z):
+        for k in ["type", "name"]:
+            if k in z[2]:
+                raise Exception(f"unexpected '{k}' found in column definition; line: {meta.line},col: {meta.column}")
+        z[2]["type"] = z[1]
+        z[2]["name"] = z[0]
+        return {"col": {z[0]: z[2]}}
 
     def index_column_names(self, z):
-        # what = "index_column_names"
-        # print(f"{what}: {len(z)} {z}", file=sys.stderr)
         return z
 
     @v_args(meta=True)
@@ -161,13 +177,9 @@ class TransformProcessor(Transformer):
         raise Exception(msg)
 
     def check_expression(self, z):
-        # what = "check_expression"
-        # print(f"{what}: {len(z)} {z}", file=sys.stderr)
         return {"check": z}
 
     def t_create_definition(self, z):
-        what = "t_create_definition"
-        print(f"{what}: {len(z)} {z}", file=sys.stderr)
         return z
 
     def primary_key(self, z):
@@ -183,8 +195,6 @@ class TransformProcessor(Transformer):
         return "key:unique"
 
     def table_create_definitions(self, z):
-        # what = "table_create_definitions"
-        # print(f"{what}: {len(z)} {z}", file=sys.stderr)
         rr = {
             "cols": {},
             "keys": {},
@@ -192,8 +202,6 @@ class TransformProcessor(Transformer):
         }
         for items in z:
             for item in items:
-                # print(f"{what}: {item}", file=sys.stderr)
-
                 for k, _ in item.items():
                     if k == "col":
                         for name, val in item[k].items():
@@ -202,15 +210,16 @@ class TransformProcessor(Transformer):
                         for name, val in item[k].items():
                             rr["keys"][name] = val
 
-        # print(json.dumps(rr, indent=2), file=sys.stderr)
-
         return rr
 
     def create_table_statement(self, z):
-        what = "create_table_statement"
-        print(f"{what}: {len(z)} {z}", file=sys.stderr)
-        self.tables[z[1]] = z[2]
-        return z
+        table_name = str(z[1])
+        k = "glpi_"
+        if table_name.startswith(k):
+            table_name = table_name[len(k) :]
+        self.tables[table_name] = z[2]
+
+        return [str(z[0]), table_name, z[2]]
 
 
 def my_gram(filename: str) -> str:
@@ -223,6 +232,24 @@ def load_file(filename: str) -> str:
         return f.read()
 
 
+def detect_common_fields(data: Dict[str, Any]) -> Dict[str, Any]:
+    temp: Dict[str, Any] = {}
+
+    result: Dict[str, Any] = {}
+    for t_name, t_def in data.items():
+        for c_name, c_def in t_def["cols"].items():
+            if c_name not in temp:
+                temp[c_name] = c_def
+                continue
+
+            z = temp[c_name]
+            for k, _ in c_def.items():
+                if k not in z:
+                    print(f"missing {k} in def: {c_name}", t_name, file=sys.stderr)
+
+    return result
+
+
 def main() -> None:
     text = load_file(FILE)
     gram = my_gram("gram.lark")
@@ -233,13 +260,29 @@ def main() -> None:
     )
 
     t = larker.parse(text)
-    print(t.pretty(), file=sys.stderr)
+    # print(t.pretty(), file=sys.stderr)
 
     zz = TransformProcessor()
-    print(json.dumps(zz.tables, indent=2))
+    # print(json.dumps(zz.tables, indent=2))
 
     rr = zz.transform(t)
-    print(rr)
+    common_fields = detect_common_fields(rr)
+
+    analize = {
+        "domain": common_fields,
+        "tables": rr,
+        "relations": {},
+        "issues": {},
+    }
+
+    print(
+        yaml.dump(
+            analize,
+            sort_keys=False,
+            Dumper=IndentDumper,
+            allow_unicode=True,
+        )
+    )
 
     sys.exit(0)
 
