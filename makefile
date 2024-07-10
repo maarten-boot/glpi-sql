@@ -1,19 +1,37 @@
+# makefile: tab=tab, ts=4
 
-FILES	=: parse_create_table_mariadb.py
+PYTHON		:=	python3.12
+PL_LINTERS	:=	eradicate,mccabe,pycodestyle,pyflakes,pylint
+LINE_LENGTH	:= 120
+PY_FILES 	:= *.py
+PL_IGNORE	:= C0114,C0116,C0115,C0103,W0719,R0904,W0231
 
+all: clean prep run
 
-all: prep run
+clean:
+	rm -f 1 2 out
 
-prep: black
+prep: black pylama
 
 black:
-	black *.py
+	black \
+		--line-length $(LINE_LENGTH) \
+		$(PY_FILES)
+
+pylama:
+	pylama \
+		--max-line-length $(LINE_LENGTH) \
+		--linters "${PL_LINTERS}" \
+		--ignore "${PL_IGNORE}" \
+		$(PY_FILES)
+
+mypy: clean
+	mypy \
+		--strict \
+		--no-incremental $(PY_FILES)
 
 run: parse_create_table_mariadb
 
-parse-glpi-db:
-	python3 ./parse-glpi-db.py 2>2 | tee out
-
 parse_create_table_mariadb:
-	python3  ./parse_create_table_mariadb.py 2>2 | tee 1
+	$(PYTHON)  ./$@.py 2>$@.2 | tee $@.2
 

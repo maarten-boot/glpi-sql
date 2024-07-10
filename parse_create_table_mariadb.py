@@ -2,13 +2,12 @@ import logging
 import sys
 import json
 
-# TODO: decimal and its default
 
 from lark import (
     Lark,
     logger,
     Transformer,
-    # v_args,
+    v_args,
     # Visitor,
 )
 
@@ -19,6 +18,7 @@ FILE = "glpi-empty.sql"
 
 class TransformProcessor(Transformer):
     def __init__(self):
+        # super().__init__()
         self.tables = {}
 
     def name(self, z):
@@ -49,8 +49,7 @@ class TransformProcessor(Transformer):
         return str(z[0])
 
     def unsigned(self, z):
-        # what = "UNSIGNED"
-        # print(f"{what}: {len(z)} {z}", file=sys.stderr)
+        _ = z
         return "unsigned"
 
     def expression(self, z):
@@ -72,9 +71,8 @@ class TransformProcessor(Transformer):
 
     def on_update(self, z):
         what = "ON_UPDATE"
-        # print(f"{what}: {len(z)} {z}", file=sys.stderr)
+        print(f"{what}: {len(z)} {z}", file=sys.stderr)
         raise Exception(f"{what} not implemented yet")
-        return {"on_update": None}
 
     def AUTO_INCREMENT(self, z):
         return {str(z).lower(): True}
@@ -94,7 +92,8 @@ class TransformProcessor(Transformer):
             print(item, file=sys.stderr)
         return rr
 
-    def data_type(self, z):
+    @v_args(meta=True)
+    def data_type(self, meta, z):
         what = "data_type"
 
         if len(z) == 1:
@@ -110,20 +109,12 @@ class TransformProcessor(Transformer):
             if str(z[1]).lower() == "unsigned":
                 return f"{z[0]}:{z[1]}"
 
-            print(f"{what}: {len(z)} {z}", file=sys.stderr)
-            msg = f"{z}"
-            raise Exception(msg)
-
         if len(z) == 3:
             if z[0].lower() == "decimal":
                 return f"decimal:{z[1]},{z[2]}"
 
-            print(f"{what}: {len(z)} {z}", file=sys.stderr)
-            msg = f"{z}"
-            raise Exception(msg)
-
-        print(f"{what}: {len(z)} {z}", file=sys.stderr)
-        msg = f"{z}"
+        msg = f"{what}: {len(z)} {z} line: {meta.line},col: {meta.column}"
+        print(msg, file=sys.stderr)
         raise Exception(msg)
 
     def column_definition(self, z):
@@ -137,34 +128,37 @@ class TransformProcessor(Transformer):
         # print(f"{what}: {len(z)} {z}", file=sys.stderr)
         return z
 
-    def index_column_name(self, z):
-        # what = "index_column_name"
-        # print(f"{what}: {len(z)} {z}", file=sys.stderr)
+    @v_args(meta=True)
+    def index_column_name(self, meta, z):
+        what = "index_column_name"
         if len(z) == 1:
             return str(z[0])
         if len(z) == 2:
             return f"{z[0]}:{z[1]}"
 
-        raise Exception(f"{len(z)} {z}")
+        msg = f"{what}: {len(z)} {z} line: {meta.line},col: {meta.column}"
+        print(msg, file=sys.stderr)
+        raise Exception(msg)
 
-    def index_definition(self, z):
+    @v_args(meta=True)
+    def index_definition(self, meta, z):
         what = "index_definition"
 
         if str(z[0]).lower() == "key":
             return {"key": {z[1]: z[2:][0]}}
 
-        if str(z[0]).lower() == "primary_key":
+        if str(z[0]).lower() == "key:primary":
             return {"key": {f"{z[0]}": z[1:][0]}}
 
-        if str(z[0]).lower() == "unique_key":
+        if str(z[0]).lower() == "key:unique":
             return {"key": {f"{z[1]}:unique": z[2:][0]}}
 
-        if str(z[0]).lower() == "fulltext_key":
+        if str(z[0]).lower() == "key:fulltext":
             return {"key": {f"{z[1]}:fulltext": z[2:][0]}}
 
-        print(f"{what}: {len(z)} {z}", file=sys.stderr)
-        raise Exception(f"{len(z)} {z}")
-        return {"key": z}
+        msg = f"{what}: {len(z)} {z} line: {meta.line},col: {meta.column}"
+        print(msg, file=sys.stderr)
+        raise Exception(msg)
 
     def check_expression(self, z):
         # what = "check_expression"
@@ -177,13 +171,16 @@ class TransformProcessor(Transformer):
         return z
 
     def primary_key(self, z):
-        return "primary_key"
+        _ = z
+        return "key:primary"
 
     def fulltext_key(self, z):
-        return "fulltext_key"
+        _ = z
+        return "key:fulltext"
 
     def unique_key(self, z):
-        return "unique_key"
+        _ = z
+        return "key:unique"
 
     def table_create_definitions(self, z):
         # what = "table_create_definitions"
@@ -197,7 +194,7 @@ class TransformProcessor(Transformer):
             for item in items:
                 # print(f"{what}: {item}", file=sys.stderr)
 
-                for k, v in item.items():
+                for k, _ in item.items():
                     if k == "col":
                         for name, val in item[k].items():
                             rr["cols"][name] = val
@@ -217,29 +214,32 @@ class TransformProcessor(Transformer):
 
 
 def my_gram(filename: str) -> str:
-    with open(filename, "r") as f:
+    with open(filename, "r", encoding="UTF-8") as f:
         return f.read()
 
 
 def load_file(filename: str) -> str:
-    with open(filename, "r") as f:
+    with open(filename, "r", encoding="UTF-8") as f:
         return f.read()
 
 
 def main() -> None:
     text = load_file(FILE)
     gram = my_gram("gram.lark")
-    l = Lark(
+
+    larker = Lark(
         gram,
         propagate_positions=True,
     )
 
-    t = l.parse(text)
+    t = larker.parse(text)
     print(t.pretty(), file=sys.stderr)
 
     zz = TransformProcessor()
-    rr = zz.transform(t)
     print(json.dumps(zz.tables, indent=2))
+
+    rr = zz.transform(t)
+    print(rr)
 
     sys.exit(0)
 

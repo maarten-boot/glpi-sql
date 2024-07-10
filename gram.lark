@@ -40,7 +40,7 @@ column_definition: column_name data_type column_modifiers
 data_type: identifier unsigned?
     | identifier "(" number ( "," number )? ")"
 
-?unsigned: "unsigned"i
+unsigned: "unsigned"i
 
 column_modifiers: column_modifier*
 
