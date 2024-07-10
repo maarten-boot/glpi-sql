@@ -1,0 +1,212 @@
+CREATE [OR REPLACE] [TEMPORARY] TABLE [IF NOT EXISTS] tbl_name
+    (create_definition,...) [table_options    ]... [partition_options]
+CREATE [OR REPLACE] [TEMPORARY] TABLE [IF NOT EXISTS] tbl_name
+    [(create_definition,...)] [table_options   ]... [partition_options]
+    select_statement
+CREATE [OR REPLACE] [TEMPORARY] TABLE [IF NOT EXISTS] tbl_name
+   { LIKE old_table_name | (LIKE old_table_name) }
+
+
+select_statement:
+    [IGNORE | REPLACE] [AS] SELECT ...   (Some legal select statement)
+
+
+create_definition:
+  { col_name column_definition | index_definition | period_definition | CHECK (expr) }
+
+
+column_definition:
+  data_type
+    [NOT NULL | NULL] [DEFAULT default_value | (expression)]
+    [ON UPDATE [NOW | CURRENT_TIMESTAMP] [(precision)]]
+    [AUTO_INCREMENT] [ZEROFILL] [UNIQUE [KEY] | [PRIMARY] KEY]
+    [INVISIBLE] [{WITH|WITHOUT} SYSTEM VERSIONING]
+    [COMMENT 'string'] [REF_SYSTEM_ID = value]
+    [reference_definition]
+  | data_type [GENERATED ALWAYS]
+  AS [ ROW {START|END} [NOT NULL ENABLE] [[PRIMARY] KEY]
+        | (expression) [VIRTUAL | PERSISTENT | STORED] ]
+      [INVISIBLE] [UNIQUE [KEY]] [COMMENT 'string']
+
+
+constraint_definition:
+   CONSTRAINT [constraint_name] CHECK (expression)
+
+
+index_definition:
+    {INDEX|KEY} [index_name] [index_type] (index_col_name,...) [index_option] ...
+  | {FULLTEXT|SPATIAL} [INDEX|KEY] [index_name] (index_col_name,...) [index_option] ...
+  | [CONSTRAINT [symbol]] PRIMARY KEY [index_type] (index_col_name,...) [index_option] ...
+  | [CONSTRAINT [symbol]] UNIQUE [INDEX|KEY] [index_name] [index_type] (index_col_name,...) [index_option] ...
+  | [CONSTRAINT [symbol]] FOREIGN KEY [index_name] (index_col_name,...) reference_definition
+
+index_col_name:
+    col_name [(length)] [ASC | DESC]
+
+index_type:
+    USING {BTREE | HASH | RTREE}
+
+index_option:
+    [ KEY_BLOCK_SIZE [=] value
+  | index_type
+  | WITH PARSER parser_name
+  | VISIBLE
+  | COMMENT 'string'
+  | CLUSTERING={YES| NO} ]
+  [ IGNORED | NOT IGNORED ]
+
+reference_definition:
+    REFERENCES tbl_name (index_col_name,...)
+      [MATCH FULL | MATCH PARTIAL | MATCH SIMPLE]
+      [ON DELETE reference_option]
+      [ON UPDATE reference_option]
+
+reference_option:
+    RESTRICT | CASCADE | SET NULL | NO ACTION
+
+period_definition:
+    PERIOD FOR [time_period_name | SYSTEM_TIME] (start_column_name, end_column_name)
+
+    table_option:
+    [STORAGE] ENGINE [=] engine_name
+  | AUTO_INCREMENT [=] number
+  | AVG_ROW_LENGTH [=] number
+  | [DEFAULT] CHARACTER SET [=] charset_name
+  | CHECKSUM [=] {0 | 1}
+  | [DEFAULT] COLLATE [=] collation_name
+  | COMMENT [=] 'string'
+  | CONNECTION [=] 'connect_string'
+  | DATA DIRECTORY [=] 'absolute path to directory'
+  | DELAY_KEY_WRITE [=] {0 | 1}
+  | ENCRYPTED [=] {YES | NO}
+  | ENCRYPTION_KEY_ID [=] number
+  | IETF_QUOTES [=] {YES | NO}
+  | INDEX DIRECTORY [=] 'absolute path to directory'
+  | INSERT_METHOD [=] { NO | FIRST | LAST }
+  | KEY_BLOCK_SIZE [=] number
+  | MAX_ROWS [=] number
+  | MIN_ROWS [=] number
+  | PACK_KEYS [=] {0 | 1 | DEFAULT}
+  | PAGE_CHECKSUM [=] {0 | 1}
+  | PAGE_COMPRESSED [=] {0 | 1}
+  | PAGE_COMPRESSION_LEVEL [=] {0 .. 9}
+  | PASSWORD [=] 'string'
+  | ROW_FORMAT [=] {DEFAULT|DYNAMIC|FIXED|COMPRESSED|REDUNDANT|COMPACT|PAGE}
+  | SEQUENCE [=] {0|1}
+  | STATS_AUTO_RECALC [=] {DEFAULT|0|1}
+  | STATS_PERSISTENT [=] {DEFAULT|0|1}
+  | STATS_SAMPLE_PAGES [=] {DEFAULT|number}
+  | TABLESPACE tablespace_name
+  | TRANSACTIONAL [=]  {0 | 1}
+  | UNION [=] (tbl_name[,tbl_name]...)
+  | WITH SYSTEM VERSIONING
+
+partition_options:
+    PARTITION BY
+        { [LINEAR] HASH(expr)
+        | [LINEAR] KEY(column_list)
+        | RANGE(expr)
+        | LIST(expr)
+        | SYSTEM_TIME [INTERVAL time_quantity time_unit] [LIMIT num] }
+    [PARTITIONS num]
+    [SUBPARTITION BY
+        { [LINEAR] HASH(expr)
+        | [LINEAR] KEY(column_list) }
+      [SUBPARTITIONS num]
+    ]
+    [(partition_definition [, partition_definition] ...)]
+
+
+partition_definition:
+    [PARTITION] partition_name
+        [VALUES {LESS THAN {(expr) | MAXVALUE} | IN (value_list)}]
+        [[STORAGE] ENGINE [=] engine_name]
+        [COMMENT [=] 'comment_text' ]
+        [DATA DIRECTORY [=] 'data_dir']
+        [INDEX DIRECTORY [=] 'index_dir']
+        [MAX_ROWS [=] max_number_of_rows]
+        [MIN_ROWS [=] min_number_of_rows]
+        [TABLESPACE [=] tablespace_name]
+        [NODEGROUP [=] node_group_id]
+        [(subpartition_definition [, subpartition_definition] ...)]
+
+
+subpartition_definition:
+    SUBPARTITION logical_name
+        [[STORAGE] ENGINE [=] engine_name]
+        [COMMENT [=] 'comment_text' ]
+        [DATA DIRECTORY [=] 'data_dir']
+        [INDEX DIRECTORY [=] 'index_dir']
+        [MAX_ROWS [=] max_number_of_rows]
+        [MIN_ROWS [=] min_number_of_rows]
+        [TABLESPACE [=] tablespace_name]
+        [NODEGROUP [=] node_group_id]
+
+
+expr:
+    expr OR expr
+  | expr || expr
+  | expr XOR expr
+  | expr AND expr
+  | expr && expr
+  | NOT expr
+  | ! expr
+  | boolean_primary IS [NOT] {TRUE | FALSE | UNKNOWN}
+  | boolean_primary
+
+boolean_primary:
+    boolean_primary IS [NOT] NULL
+  | boolean_primary <=> predicate
+  | boolean_primary comparison_operator predicate
+  | boolean_primary comparison_operator {ALL | ANY} (subquery)
+  | predicate
+
+comparison_operator: = | >= | > | <= | < | <> | !=
+
+predicate:
+    bit_expr [NOT] IN (subquery)
+  | bit_expr [NOT] IN (expr [, expr] ...)
+  | bit_expr [NOT] BETWEEN bit_expr AND predicate
+  | bit_expr SOUNDS LIKE bit_expr
+  | bit_expr [NOT] LIKE simple_expr [ESCAPE simple_expr]
+  | bit_expr [NOT] REGEXP bit_expr
+  | bit_expr
+
+bit_expr:
+    bit_expr | bit_expr
+  | bit_expr & bit_expr
+  | bit_expr << bit_expr
+  | bit_expr >> bit_expr
+  | bit_expr + bit_expr
+  | bit_expr - bit_expr
+  | bit_expr * bit_expr
+  | bit_expr / bit_expr
+  | bit_expr DIV bit_expr
+  | bit_expr MOD bit_expr
+  | bit_expr % bit_expr
+  | bit_expr ^ bit_expr
+  | bit_expr + interval_expr
+  | bit_expr - interval_expr
+  | simple_expr
+
+simple_expr:
+    literal
+  | identifier
+  | function_call
+  | simple_expr COLLATE collation_name
+  | param_marker
+  | variable
+  | simple_expr || simple_expr
+  | + simple_expr
+  | - simple_expr
+  | ~ simple_expr
+  | ! simple_expr
+  | BINARY simple_expr
+  | (expr [, expr] ...)
+  | ROW (expr, expr [, expr] ...)
+  | (subquery)
+  | EXISTS (subquery)
+  | {identifier expr}
+  | match_expr
+  | case_expr
+  | interval_expr

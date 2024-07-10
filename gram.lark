@@ -1,0 +1,125 @@
+start: statements
+
+statements: ( statement ";" )+
+
+statement: create_statement
+    | drop_statement
+    | set_statement
+
+create_statement: CREATE create_table_statement
+
+create_table_statement: TABLE table_name "(" table_create_definitions ")" table_options
+
+table_options: ignore_until_semicolon // ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
+
+table_create_definitions: t_create_definition ( "," t_create_definition )*
+
+t_create_definition: column_definition
+    | index_definition
+    | check_expression
+
+check_expression: CHECK "(" expression ")"
+
+index_definition: primary_key "(" index_column_names ")"
+    | unique_key key_name "(" index_column_names ")"
+    | fulltext_key key_name "(" index_column_names ")"
+    | KEY key_name "(" index_column_names ")"
+
+primary_key: PRIMARY KEY
+fulltext_key: FULLTEXT KEY
+unique_key: UNIQUE KEY
+
+index_column_names: index_column_name ( "," index_column_name )*
+
+index_column_name: name ( "(" number ")" )? // index length may be limited by a optional number
+
+column_names: column_name ( "," column_name )*
+
+column_definition: column_name data_type column_modifiers
+
+data_type: identifier unsigned?
+    | identifier "(" number ( "," number )? ")"
+
+?unsigned: "unsigned"i
+
+column_modifiers: column_modifier*
+
+?column_modifier: null_or_not_null
+    | default_value
+    | on_update
+    | comment
+    | AUTO_INCREMENT
+
+table_name:     name -> name
+column_name:    name -> name
+key_name:       name -> name
+
+?name: "`"? identifier "`"
+
+// [ON UPDATE [NOW | CURRENT_TIMESTAMP] [(precision)]]
+on_update:  ON UPDATE ( NOW | CURRENT_TIMESTAMP )  ( "(" number ")" )?
+
+comment: COMMENT string
+
+null_or_not_null: NOT? NULL
+
+default_value: DEFAULT literal_constant_or_expression
+
+?literal_constant_or_expression: literal_constant
+    | "(" expression ")"
+
+?literal_constant: string
+    | number
+    | identifier
+
+expression: string
+
+
+drop_statement: DROP TABLE IF EXISTS table_name
+
+set_statement: SET FOREIGN_KEY_CHECKS "=" number
+
+ignore_until_semicolon: /[^;]+/
+
+string: STRING
+    | /'([^']*('')?)*'/ // sql uses '' strings ane double '' is permitted inside the string
+
+number: NUMBER
+
+?identifier: CNAME
+
+AUTO_INCREMENT: "auto_increment"i
+CHECK: "check"i
+COMMENT: "comment"i
+CREATE: "create"i
+DEFAULT: "default"i
+DROP: "drop"i
+EXISTS: "exists"i
+FOREIGN_KEY_CHECKS: "FOREIGN_KEY_CHECKS"i
+FULLTEXT: "fulltext"i
+IF: "if"i
+INDEX: "index"i
+KEY: "KEY"i
+NOT: "not"i
+ON: "on"i
+NULL: "null"i
+PRIMARY: "primary"i
+SET: "set"i
+TABLE: "table"i
+UNIQUE: "unique"i
+UPDATE: "update"i
+NOW: "NOW"i
+CURRENT_TIMESTAMP: "CURRENT_TIMESTAMP"i
+
+EXTRA_COMMENT: /###.*/ // mysql dump adds non sql comments between tables
+
+
+%import common.CNAME
+%import common.ESCAPED_STRING   -> STRING
+%import common.SIGNED_NUMBER    -> NUMBER
+%import common.SQL_COMMENT
+%import common.WS
+
+%ignore WS
+%ignore SQL_COMMENT
+%ignore EXTRA_COMMENT
