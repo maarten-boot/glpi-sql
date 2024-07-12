@@ -12,6 +12,7 @@ PL_IGNORE	:= C0114,C0116,C0115,C0103,W0719,R0904,W0231,E203,C901
 # W0231
 # E203
 # C901
+
 all: clean prep run
 
 clean:
@@ -39,5 +40,5 @@ mypy: clean
 run: parse_create_table_mariadb
 
 parse_create_table_mariadb:
-	$(PYTHON)  ./$@.py 2>$@.2 | tee $@.1
+	$(PYTHON) ./$@.py 2>$@.2 | tee $@.1
 
