@@ -1,11 +1,18 @@
 from typing import (
     Dict,
     Any,
+    Tuple,
     List,
 )
 
 import sys
 import copy
+
+from lark import (
+    Lark,
+)
+
+from transformProcessor import TransformProcessor
 
 
 class MyApp:
@@ -21,7 +28,7 @@ class MyApp:
         "date_update",
     ]
 
-    DOMAINS: Dict[str, Any] = {
+    DOMAINSx: Dict[str, Any] = {
         "varchar255_null": {
             "default": "null",
             "type": "varchar:255",
@@ -48,6 +55,8 @@ class MyApp:
         },
     }
 
+    DOMAINS: Dict[str, Any] = {}
+
     def __init__(
         self,
         verbose: bool = False,
@@ -65,14 +74,12 @@ class MyApp:
         filename: str,
     ) -> str:
         self.gram = self.load_file(filename)
-        return self.gram
 
     def load_text(
         self,
         filename: str,
     ) -> str:
         self.text = self.load_file(filename)
-        return self.text
 
     def detect_domain(
         self,
@@ -80,6 +87,7 @@ class MyApp:
     ) -> Dict[str, Any]:
         rr = {}
 
+        candidate = True
         for d_name, d_def in self.DOMAINS.items():
             candidate = True
             for k, v in c_def.items():
@@ -98,14 +106,69 @@ class MyApp:
             return c_def
 
         if "domain" in rr:
-            # print("ORG", c_def)
-            # print("  DOMAIN", DOMAINS[rr["domain"]])
-            # print("    Result", rr)
-
             for k in self.DOMAINS[rr["domain"]].keys():
                 del rr[k]
 
         return rr
+
+    def abstract_one_column(
+        self,
+        c_def: Dict[str, Any],
+    ) -> Tuple[str, Dict[str, Any]]:
+        # all but name and comment and create a name from that
+        ll = []
+        c = copy.deepcopy(c_def)
+
+        z = {
+            "type": "t",
+            "default": "d",
+            "null": "n",
+            "auto_increment": "ai",
+            "comment": None,
+            "name": None,
+        }
+
+        seen = []
+        domain = {}
+
+        for k, v in z.items():
+            if k not in c:
+                continue
+
+            if v is None:
+                seen.append(k)
+                continue
+
+            if k == "null":
+                ll.append(f"{v}:{'T' if c[k] is True else 'F'}")
+            else:
+                ll.append(f"{v}:{c[k]}")
+            domain[k] = c_def[k]
+            seen.append(k)
+
+        for k in sorted(c_def.keys()):
+            if k in seen:
+                continue
+            ll.append(f"{k}:{c_def[k]}")
+            domain[k] = c_def[k]
+
+        name = ", ".join(ll)
+        return name, domain
+
+    def count_common_fields(
+        self,
+        data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        result: Dict[str, Any] = {}
+        for _, t_def in data.items():  # tables
+            cols = t_def["cols"]
+            for _, c_def in cols.items():  # columns
+                name, domain = self.abstract_one_column(c_def)
+                if name not in result:
+                    self.DOMAINS[name] = domain
+                    result[name] = 0
+                result[name] += 1
+        return result
 
     def detect_common_fields(
         self,
@@ -113,13 +176,14 @@ class MyApp:
     ) -> Dict[str, Any]:
         result: Dict[str, Any] = {}
 
-        for t_name, t_def in data.items():
+        for t_name, t_def in data.items():  # tables
+            cols = t_def["cols"]
+
             result[t_name] = copy.deepcopy(t_def)
 
-            for c_name, c_def in t_def["cols"].items():
+            for c_name, c_def in cols.items():  # columns
                 new_c_def = self.detect_domain(c_def)
                 result[t_name]["cols"][c_name] = new_c_def
-                # print(c_def, new_c_def)
 
         return result
 
@@ -130,10 +194,11 @@ class MyApp:
         temp: Dict[str, Any] = {}
         result: Dict[str, Any] = {}
 
-        for t_name, t_def in data.items():
+        for t_name, t_def in data.items():  # tables
             cols = t_def["cols"]
             keys = t_def["keys"]
-            for c_name, c_def in cols.items():
+
+            for c_name, c_def in cols.items():  # columns
                 _ = c_def
 
                 rel = False
@@ -155,7 +220,8 @@ class MyApp:
                 if not rel:
                     continue
 
-                print("RELATION:", t_name, "->", d_name, "via", via, file=sys.stderr)
+                if self.verbose:
+                    print("RELATION:", t_name, "->", d_name, "via", via, file=sys.stderr)
 
                 if t_name not in result:
                     result[t_name] = {}
@@ -170,14 +236,15 @@ class MyApp:
                         temp[t_name] = {}
                     temp[t_name][via] = "NoIndexForReferencialIntegrity"
 
-                    msg = (
-                        f"    no index for {via} in table: {t_name}: "
-                        + "would be needed to implement referential integrity"
-                    )
-                    print(
-                        msg,
-                        file=sys.stderr,
-                    )
+                    if self.verbose:
+                        msg = (
+                            f"    no index for {via} in table: {t_name}: "
+                            + "would be needed to implement referential integrity"
+                        )
+                        print(
+                            msg,
+                            file=sys.stderr,
+                        )
 
         return result, temp
 
@@ -207,3 +274,44 @@ class MyApp:
         result: Dict[str, Any] = {}
 
         return result
+
+    def extract_name_collisions(
+        self,
+        data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        result: Dict[str, Any] = {}
+
+        for t_name, t_def in data.items():
+            c = data[t_name]["cols"]
+            for c_name, c_def in c.items():
+                if c_name not in result:
+                    result[c_name] = {}
+                d = c_def.get("domain")
+                if d is None:
+                    continue
+                if d not in result[c_name]:
+                    result[c_name][d] = []
+                result[c_name][d].append(t_name)
+
+        return result
+
+    def run(
+        self,
+        gram_file: str,
+        text_file: str,
+    ) -> Dict[str, Any]:
+        self.my_gram(gram_file)
+        self.load_text(text_file)
+
+        larker = Lark(
+            self.gram,
+            propagate_positions=True,
+        )
+
+        t = larker.parse(self.text)
+        zz = TransformProcessor(
+            verbose=self.verbose,
+        )
+        rr = zz.transform(t)
+
+        return rr

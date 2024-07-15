@@ -1,13 +1,8 @@
 import logging
-
+import sys
 import yaml
 
-from lark import (
-    Lark,
-    logger,
-)
-
-from transformProcessor import TransformProcessor
+from lark import logger
 from myApp import MyApp
 
 logger.setLevel(logging.WARN)
@@ -24,24 +19,26 @@ class IndentDumper(yaml.Dumper):  # pylint: disable=too-many-ancestors
 
 def main() -> None:
     FILE = "glpi-empty.sql"
+    GRAM = "gram.lark"
     VERBOSE = 0
 
     ma = MyApp(verbose=VERBOSE)
-
-    text = ma.load_text(FILE)
-    gram = ma.my_gram("gram.lark")
-
-    larker = Lark(
-        gram,
-        propagate_positions=True,
-    )
-    t = larker.parse(text)
-    zz = TransformProcessor(verbose=VERBOSE)
-    rr = zz.transform(t)
-
+    rr = ma.run(GRAM, FILE)
+    ma.count_common_fields(rr)
     rr2 = ma.detect_common_fields(rr)
 
     relations, rel_issues = ma.detect_relations(rr2)
+
+    # extract col_name -> domain -> [table_names], to detect identical name with differnt domain
+    t1 = ma.extract_name_collisions(rr2)
+    for col in sorted(t1.keys()):
+        if len(t1[col].keys()) <= 1:
+            continue
+        for domain in sorted(t1[col].keys()):
+            count = len(t1[col][domain])
+
+            print(col, domain, count, t1[col][domain], file=sys.stderr)
+
     parents = ma.extract_parents(rr2)
 
     analize = {
